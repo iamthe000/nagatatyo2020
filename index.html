@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<link rel="apple-touch-icon" sizes="192x192" href="icon192x192.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>永田町バトル2020</title>
+<style>
+    body {
+        font-family: sans-serif;
+        background-color: #fff;
+        color: #000;
+        max-width: 700px;
+        margin: 20px auto;
+        padding: 10px;
+        border: 1px solid #000;
+    }
+    h1, h2 {
+        margin-bottom: 10px;
+        border-bottom: 2px solid #000;
+        padding-bottom: 5px;
+    }
+
+    .stats-panel {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 20px;
+        padding: 10px;
+        border: 1px solid #000;
+    }
+    .stat-card {
+        text-align: center;
+        flex-grow: 1;
+        padding: 5px;
+        border-left: 1px dashed #666;
+    }
+    .stat-card:first-child { border-left: none; }
+    .stat-card div:first-child {
+        font-size: 0.8em;
+        color: #333;
+    }
+    .stat-card .value {
+        font-size: 2em;
+        font-weight: bold;
+    }
+
+    .seat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(8px, 1fr));
+        gap: 1px;
+        border: 1px solid #000;
+        padding: 3px;
+        background-color: #eee;
+        margin-bottom: 20px;
+    }
+    .seat {
+        width: 100%;
+        aspect-ratio: 1;
+    }
+    .seat.player { background-color: #f00; }
+    .seat.bot { background-color: #00f; }
+    .seat.neutral { background-color: #ccc; }
+
+    .policy-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .policy-card {
+        background-color: #fff;
+        border: 2px solid #000;
+        padding: 10px;
+        cursor: pointer;
+        font-size: 1em;
+        font-weight: bold;
+        text-align: center;
+        transition: background-color 0.1s;
+    }
+    .policy-card:hover {
+        background-color: #ddd;
+    }
+    .policy-card.attack {
+        border-style: dashed;
+    }
+
+    .log-container {
+        height: 150px;
+        overflow-y: auto;
+        border: 1px solid #000;
+        background-color: #f9f9f9;
+        padding: 8px;
+        font-size: 0.85em;
+    }
+
+    .dialog-box {
+        display: flex;
+        align-items: flex-start;
+        margin: 8px 0;
+    }
+    .character-img {
+        width: 40px;
+        height: 40px;
+        border: 1px solid #000;
+        margin-right: 8px;
+        object-fit: cover;
+        flex-shrink: 0;
+    }
+    .dialog-box.bot-dialog .character-img {
+        margin-right: 0;
+        margin-left: 8px;
+    }
+    .speech {
+        position: relative;
+        background: #fff;
+        border: 1px solid #000;
+        padding: 6px;
+        max-width: calc(100% - 56px);
+        line-height: 1.3;
+    }
+    .speech.bot {
+        background: #eee;
+    }
+
+    .game-over {
+        position: fixed; top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(255, 255, 255, 0.95);
+        display: none; justify-content: center; align-items: center;
+        z-index: 1000;
+    }
+    .game-over-content {
+        background: #fff;
+        padding: 30px;
+        border: 3px solid #000;
+        text-align: center;
+    }
+    button {
+        padding: 10px 20px;
+        background: #000;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        font-size: 1em;
+        font-weight: bold;
+        transition: background-color 0.1s;
+    }
+    button:hover {
+        background-color: #333;
+    }
+
+    .bgm-toggle {
+        background: #ffa500;
+        color: #000;
+        border: 2px solid #000;
+        font-weight: bold;
+        padding: 6px 12px;
+        cursor: pointer;
+        margin-bottom: 10px;
+    }
+    .bgm-toggle:hover {
+        background: #ffbf40;
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>永田町バトル2020</h1>
+        <p>全議席(465)を埋め尽くせ！</p>
+        <button class="bgm-toggle" id="bgmButton" onclick="toggleBGM()">🎵 BGMオン</button>
+        <audio id="bgm" src="bgm.mp3" loop></audio>
+    </div>
+
+    <h2>ログ</h2>
+    <div class="log-container" id="logContainer"></div>
+
+    <h2>議席状況</h2>
+    <div class="seat-grid" id="seatGrid"></div>
+
+    <h2>政策</h2>
+    <div class="policy-grid" id="policyGrid"></div>
+
+    <div class="stats-panel">
+        <div class="stat-card"><div>あなた</div><div class="value" id="playerSeats">0</div></div>
+        <div class="stat-card"><div>野党</div><div class="value" id="botSeats">0</div></div>
+        <div class="stat-card"><div>残り</div><div class="value" id="neutralSeats">465</div></div>
+        <div class="stat-card"><div>ターン</div><div class="value" id="turnCount">1</div></div>
+    </div>
+
+</div>
+
+<div class="game-over" id="gameOver">
+    <div class="game-over-content">
+        <h2 id="resultTitle"></h2>
+        <button onclick="restartGame()">リスタート</button>
+    </div>
+</div>
+
+<script>
+const TOTAL_SEATS = 465;
+const policies = [
+    { id: 0, name: "経済対策", base: 45 },
+    { id: 1, name: "教育改革", base: 35 },
+    { id: 2, name: "医療充実", base: 40 },
+    { id: 3, name: "防衛強化", base: 38 },
+    { id: 4, name: "環境政策", base: 32 },
+    { id: 5, name: "子育て支援", base: 30 },
+    { id: 6, name: "地方創生", base: 28 },
+    { id: 7, name: "スキャンダル暴露", base: 25, attack: true },
+    { id: 8, name: "メディア操作", base: 22, attack: true },
+];
+
+let gameState;
+let seatElements = [];
+let bgmEnabled = false;
+
+function createInitialState() {
+    return {
+        playerSeats: 10,
+        botSeats: 10,
+        neutralSeats: TOTAL_SEATS - 20,
+        turn: 1,
+        isPlayerTurn: true,
+        policyUsage: {},
+    };
+}
+
+function init() {
+    gameState = createInitialState();
+    document.getElementById('logContainer').innerHTML = '';
+    document.getElementById('gameOver').style.display = 'none';
+
+    const seatGrid = document.getElementById('seatGrid');
+    seatGrid.innerHTML = '';
+    seatElements = [];
+    for (let i = 0; i < TOTAL_SEATS; i++) {
+        const seat = document.createElement('div');
+        seat.className = 'seat neutral';
+        seatGrid.appendChild(seat);
+        seatElements.push(seat);
+    }
+
+    const policyGrid = document.getElementById('policyGrid');
+    policyGrid.innerHTML = '';
+    policies.forEach(policy => {
+        const card = document.createElement('div');
+        card.className = 'policy-card';
+        if (policy.attack) card.classList.add('attack');
+        card.textContent = policy.name;
+        card.onclick = () => selectPolicy(policy.id);
+        policyGrid.appendChild(card);
+    });
+
+    // 🏆 初期議席の配置を「前から自党、後ろから野党」になるように変更
+    const pSeats = gameState.playerSeats;
+    const bSeats = gameState.botSeats;
+    const nSeats = gameState.neutralSeats;
+    
+    // プレイヤー議席 (前から)
+    for (let i = 0; i < pSeats; i++) {
+        seatElements[i].classList.replace('neutral', 'player');
+    }
+
+    // ボット議席 (後ろから)
+    for (let i = 0; i < bSeats; i++) {
+        const index = TOTAL_SEATS - 1 - i;
+        if (index >= pSeats) { // プレイヤー議席と被らないようにチェック
+             seatElements[index].classList.replace('neutral', 'bot');
+        } else {
+            // プレイヤーとボットの初期議席数が合計でTOTAL_SEATSを超える場合に備えた安全措置
+            // 今回はTOTAL_SEATS=465, 合計20なので不要だがロジックとして残す
+        }
+    }
+    // 中立議席は残りの部分
+    
+    updateDisplay();
+    addDialog("player", "作戦開始だ…この国を動かすのは俺だ！");
+}
+
+function calcEffect(id) {
+    const policy = policies.find(p => p.id === id);
+    const used = gameState.policyUsage[id] || 0;
+    const factor = Math.pow(0.8, used);
+    return Math.max(3, Math.round(policy.base * factor));
+}
+
+function selectPolicy(id) {
+    if (!gameState.isPlayerTurn) return;
+    const p = policies.find(p => p.id === id);
+    const e = calcEffect(id);
+    gameState.policyUsage[id] = (gameState.policyUsage[id] || 0) + 1;
+
+    if (p.attack) {
+        const s = Math.min(e, gameState.botSeats);
+        if (s > 0) {
+            gameState.playerSeats += s;
+            gameState.botSeats -= s;
+            updateSeats('bot', 'player', s, 'forward'); // 🏆 議席の更新方法を変更
+            addDialog("player", `${p.name}で野党から${s}議席を奪った！`);
+        } else addDialog("player", `${p.name}を使ったが効果はなかった…`);
+    } else {
+        const g = Math.min(e, gameState.neutralSeats);
+        if (g > 0) {
+            gameState.playerSeats += g;
+            gameState.neutralSeats -= g;
+            updateSeats('neutral', 'player', g, 'forward'); // 🏆 議席の更新方法を変更
+            addDialog("player", `${p.name}で${g}議席を獲得！`);
+        } else addDialog("player", `${p.name}の効果はもうないようだ…`);
+    }
+
+    endTurn();
+    setTimeout(botTurn, 1500);
+}
+
+function botTurn() {
+    if (checkGameOver()) return;
+    const p = policies[Math.floor(Math.random() * policies.length)];
+    const e = calcEffect(p.id);
+    gameState.policyUsage[p.id] = (gameState.policyUsage[p.id] || 0) + 1;
+
+    if (p.attack) {
+        const s = Math.min(e, gameState.playerSeats);
+        if (s > 0) {
+            gameState.botSeats += s;
+            gameState.playerSeats -= s;
+            updateSeats('player', 'bot', s, 'backward'); // 🏆 議席の更新方法を変更
+            addDialog("bot", `${p.name}で君から${s}議席を奪った！`);
+        } else addDialog("bot", `${p.name}を使ったが効果はなかった…`);
+    } else {
+        const g = Math.min(e, gameState.neutralSeats);
+        if (g > 0) {
+            gameState.botSeats += g;
+            gameState.neutralSeats -= g;
+            updateSeats('neutral', 'bot', g, 'backward'); // 🏆 議席の更新方法を変更
+            addDialog("bot", `${p.name}で${g}議席を獲得！`);
+        } else addDialog("bot", `${p.name}の効果はもうない…`);
+    }
+
+    endTurn(true);
+}
+
+/* 🎤 失言イベント */
+function checkForSlipEvent() {
+    // 20%の確率で発動
+    if (Math.random() < 0.2 && gameState.playerSeats > 5) {
+        const phrases = ["私はリストを見ていない", "ガースーです"];
+        const line = phrases[Math.floor(Math.random() * phrases.length)];
+        addDialog("player", line);
+        setTimeout(() => {
+            addDialog("player", "しまった、また失言してしまった…");
+            const loss = Math.floor(Math.random() * 8) + 3; // 3〜10議席減
+            const actualLoss = Math.min(loss, gameState.playerSeats);
+            gameState.playerSeats -= actualLoss;
+            gameState.neutralSeats += actualLoss;
+            updateSeats('player', 'neutral', actualLoss, 'forward'); // 🏆 議席の更新方法を変更
+            updateDisplay();
+            addDialog("bot", `失言で${actualLoss}議席が離れたようだな…`);
+            checkGameOver();
+        }, 1000);
+    }
+}
+
+function endTurn(isBot = false) {
+    if (isBot) {
+        gameState.turn++;
+        gameState.isPlayerTurn = true;
+    } else {
+        gameState.isPlayerTurn = false;
+    }
+    updateDisplay();
+    checkGameOver();
+    if (!isBot) checkForSlipEvent(); // 🎤 自分のターン後に発動判定
+}
+
+// 🏆 議席の更新ロジックを変更
+function updateSeats(from, to, n, direction = 'random') {
+    let targetSeats = [];
+    if (direction === 'forward') {
+        // 前方から探す (プレイヤーの獲得・離脱で使う)
+        for (let i = 0; i < TOTAL_SEATS; i++) {
+            if (seatElements[i].classList.contains(from)) {
+                targetSeats.push(seatElements[i]);
+            }
+        }
+        // 前方から n 議席分を更新
+        for (let i = 0; i < n && i < targetSeats.length; i++) {
+            targetSeats[i].classList.remove(from);
+            targetSeats[i].classList.add(to);
+        }
+
+    } else if (direction === 'backward') {
+        // 後方から探す (ボットの獲得・離脱で使う)
+        for (let i = TOTAL_SEATS - 1; i >= 0; i--) {
+            if (seatElements[i].classList.contains(from)) {
+                targetSeats.push(seatElements[i]);
+            }
+        }
+        // 後方から n 議席分を更新
+        for (let i = 0; i < n && i < targetSeats.length; i++) {
+            targetSeats[i].classList.remove(from);
+            targetSeats[i].classList.add(to);
+        }
+
+    } else {
+        // ランダム (念の為)
+        const c = seatElements.filter(s => s.classList.contains(from));
+        for (let i = 0; i < n && c.length; i++) {
+            const r = Math.floor(Math.random() * c.length);
+            const s = c[r];
+            s.classList.remove(from);
+            s.classList.add(to);
+            c.splice(r, 1);
+        }
+    }
+}
+
+function updateDisplay() {
+    document.getElementById('playerSeats').textContent = gameState.playerSeats;
+    document.getElementById('botSeats').textContent = gameState.botSeats;
+    document.getElementById('neutralSeats').textContent = gameState.neutralSeats;
+    document.getElementById('turnCount').textContent = gameState.turn;
+}
+
+function addDialog(speaker, text) {
+    const container = document.getElementById('logContainer');
+    const div = document.createElement('div');
+    div.className = 'dialog-box' + (speaker === "bot" ? " bot-dialog" : "");
+    // 仮の画像設定（元のコードのまま）
+    const img = document.createElement('img');
+    img.className = 'character-img';
+    img.src = speaker === "player" ? "zimin.png" : "minsyu.png"; 
+    const speech = document.createElement('div');
+    speech.className = 'speech' + (speaker === "bot" ? " bot" : "");
+    speech.textContent = text;
+    if (speaker === "bot") { div.appendChild(speech); div.appendChild(img); }
+    else { div.appendChild(img); div.appendChild(speech); }
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function checkGameOver() {
+    if (gameState.neutralSeats <= 0) {
+        let w = '';
+        if (gameState.playerSeats > gameState.botSeats) w = 'あなたの最終勝利！';
+        else if (gameState.botSeats > gameState.playerSeats) w = '野党の勝利！';
+        else w = '引き分け！';
+        document.getElementById('resultTitle').textContent = w;
+        document.getElementById('gameOver').style.display = 'flex';
+        return true;
+    }
+    return false;
+}
+
+function restartGame() { init(); }
+
+function toggleBGM() {
+    const bgm = document.getElementById("bgm");
+    const btn = document.getElementById("bgmButton");
+    if (!bgmEnabled) {
+        bgm.play();
+        bgmEnabled = true;
+        btn.textContent = "🔇 BGMオフ";
+    } else {
+        bgm.pause();
+        bgmEnabled = false;
+        btn.textContent = "🎵 BGMオン";
+    }
+}
+
+window.onload = init;
+</script>
+</body>
+</html>

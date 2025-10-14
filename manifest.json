@@ -1,0 +1,13 @@
+{
+    "name": "永田町バトル2020",
+    "short_name": "PWA sample",
+    "start_url": "index.html",
+    "display": "standalone",
+    "icons": [
+        {
+            "src": "icon192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        }
+    ]
+}
